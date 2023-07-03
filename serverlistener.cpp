@@ -3,18 +3,14 @@
 #include <iostream>
 #include <cstdlib>
 #include <list>
-#include <future>
-#include <chrono>
-#include <thread>
-#include <sstream>
 
 #include "requestparser.h"
 
-ServerListener::ServerListener(int port, size_t buffer_size) {
+ServerListener::ServerListener(char const *port) {
     this->port = port;
-    this->buffer_size = buffer_size;
-    this->server_running = false;
     this->listen_socket = INVALID_SOCKET;
+    this->socket_props = NULL;
+    this->server_running = false;
 
     WSADATA wsaData;
     if(WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
@@ -22,8 +18,7 @@ ServerListener::ServerListener(int port, size_t buffer_size) {
     }
 }
 
-void ServerListener::run(std::function<void(ClientAcceptationException)> client_acceptation_error_callback) {
-    std::shared_ptr<addrinfo> socket_props(nullptr, [](addrinfo* ai) { freeaddrinfo(ai); });
+void ServerListener::run() {
     addrinfo hints;
     ZeroMemory(&hints, sizeof(hints));
 
@@ -32,7 +27,7 @@ void ServerListener::run(std::function<void(ClientAcceptationException)> client_
     hints.ai_protocol = IPPROTO_TCP;
     hints.ai_flags = AI_PASSIVE;
 
-    int addrinfo_status = getaddrinfo(NULL, std::to_string(port).c_str(), &hints, (addrinfo**)&socket_props);
+    int addrinfo_status = getaddrinfo(NULL, port, &hints, &socket_props);
     if(addrinfo_status != 0) {
         throw AddrinfoException(addrinfo_status);
     }
@@ -43,31 +38,22 @@ void ServerListener::run(std::function<void(ClientAcceptationException)> client_
     }
 
     if(bind(listen_socket, socket_props->ai_addr, (int)socket_props->ai_addrlen) == SOCKET_ERROR) {
-        closesocket(listen_socket);
         throw SocketBindingException(WSAGetLastError());
     }
 
     if(listen(listen_socket, SOMAXCONN) == SOCKET_ERROR) {
-        closesocket(listen_socket);
         throw ListenException(WSAGetLastError());
     }
 
-    std::map<SOCKET, std::thread> threads;
-
     bool server_running = true;
     while(server_running) {
-        SOCKET client_socket;
-
-        try {
-            client_socket = accept(listen_socket, NULL, NULL);
-            if(client_socket == INVALID_SOCKET) {
-                throw ClientAcceptationException(WSAGetLastError());
-            }
-        } catch(ClientAcceptationException &e) {
-            client_acceptation_error_callback(e);
+        SOCKET client_socket = accept(listen_socket, NULL, NULL);
+        if(client_socket == INVALID_SOCKET) {
             continue;
         }
-        threads[client_socket] = std::thread(ServerListener::clientHandler, client_socket, buffer_size);
+        if (HANDLE h = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ServerListener::clientHandler, (LPVOID)client_socket, 0, NULL)) {
+            CloseHandle(h);
+        }
     }
 }
 
@@ -76,12 +62,16 @@ void ServerListener::stop() {
     if(listen_socket != INVALID_SOCKET) {
         shutdown(listen_socket, SD_BOTH);
         closesocket(listen_socket);
+        listen_socket = INVALID_SOCKET;
+    }
+    if (socket_props) {
+        freeaddrinfo(socket_props);
+        socket_props = NULL;
     }
 }
 
-void ServerListener::clientHandler(SOCKET client_socket, size_t buffer_size) {
-    int recvbuflen = buffer_size;
-    char recvbuf[recvbuflen];
+DWORD ServerListener::clientHandler(SOCKET client_socket) {
+    char recvbuf[buffer_size];
     int bytes_received;
     RequestParser parser;
 
@@ -99,7 +89,7 @@ void ServerListener::clientHandler(SOCKET client_socket, size_t buffer_size) {
 
         bool headers_ready = false;
         while(!headers_ready) {
-            bytes_received = recv(client_socket, recvbuf, recvbuflen, 0);
+            bytes_received = recv(client_socket, recvbuf, buffer_size, 0);
             if(bytes_received > 0) {
                 parser.processChunk(recvbuf, bytes_received);
                 if(parser.allHeadersAvailable()) {
@@ -110,9 +100,9 @@ void ServerListener::clientHandler(SOCKET client_socket, size_t buffer_size) {
             }
         }
 
-        auto headers = parser.getHeaders();
+        std::map<std::string, std::string> headers = parser.getHeaders();
 
-        auto conn_it = headers.find("Connection");
+        std::map<std::string, std::string>::iterator conn_it = headers.find("Connection");
         if(conn_it != headers.end() && conn_it->second == "close") {
             goto cleanup;
         }
@@ -123,7 +113,7 @@ void ServerListener::clientHandler(SOCKET client_socket, size_t buffer_size) {
 
         std::cout << "> " << client_ip << "\n";
 
-        auto ua_it = headers.find("User-Agent");
+        std::map<std::string, std::string>::iterator ua_it = headers.find("User-Agent");
         if(ua_it != headers.end()) {
             std::cout << "> " << ua_it->second << "\n";
         } else {
@@ -132,47 +122,78 @@ void ServerListener::clientHandler(SOCKET client_socket, size_t buffer_size) {
 
         std::cout << "\n";
 
-        std::string response_body = "<!DOCTYPE html><html><head>"
-            "<title>Request info</title>"
-            "<style>"
-                "table, th, td { border: 1px solid #333; }"
+        std::stringstream response_body;
+
+        if (parser.getMethod() == "GET") {
+            response_body <<
+                "<!DOCTYPE html>"
+                "<title>Request info</title>"
+                "<style>"
+                "table, th, td { border: 1px solid #333; border-collapse: collapse; }"
                 "th, td { padding: 3px 5px; }"
                 "th { text-align: right; }"
                 "td { text-align: left; }"
-            "</style>"
-        "</head>"
-        "<body><h1>Request info</h1>";
-
-        response_body += "<table>";
-
-        response_body += "<tr><th>Method</th><td>" + parser.getMethod() + "</td></tr>";
-        response_body += "<tr><th>Path</th><td>" + parser.getPath() + "</td></tr>";
-        response_body += "<tr><th>Protocol</th><td>" + parser.getProtocol() + "</td></tr>";
-
-        for(const auto &header : headers) {
-            response_body += "<tr><th>" + header.first + "</th><td>" + header.second + "</td></tr>";
+                "</style>"
+                "<h1>JavaScript test</h1>"
+                "<table>"
+                "<tr><th>new Date().toTimeString()</th><td><script>document.write(new Date().toTimeString())</script></td></tr>"
+                "<tr><th>'JavaScript'.toLowerCase()</th><td><script>document.write('JavaScript'.toLowerCase())</script></td></tr>"
+                "<tr><th>'JavaScript'.toUpperCase()</th><td><script>document.write('JavaScript'.toUpperCase())</script></td></tr>"
+                "</table>"
+                "<h1>Request info</h1>";
+        } else {
+            response_body <<
+                "<h1>XMLHttpRequest info</h1>";
         }
 
-        std::stringstream ss;
-        ss << std::this_thread::get_id();
-        response_body += "<tr><th>Thread ID</th><td>" + ss.str() + "</td></tr>";
+        response_body <<
+            "<table>"
+            "<tr><th>Method</th><td>" << parser.getMethod() << "</td></tr>"
+            "<tr><th>Path</th><td>" << parser.getPath() << "</td></tr>"
+            "<tr><th>Protocol</th><td>" << parser.getProtocol() << "</td></tr>";
 
-        response_body += "</table>";
-        response_body += "</body></html>\r\n";
+        for(std::map<std::string, std::string>::iterator header = headers.begin(); header != headers.end(); ++header) {
+            response_body <<
+                "<tr><th>" << header->first << "</th><td>" << header->second << "</td></tr>";
+        }
 
+        response_body <<
+            "<tr><th>Thread ID</th><td>" << GetCurrentThreadId() << "</td></tr>"
+            "</table>";
 
-        std::string response_headers = "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html; charset=UTF-8\r\n"
-        "Connection: keep-alive\r\n"
-        "Content-Length: " + std::to_string(response_body.length()) + "\r\n\r\n";
+        if (parser.getMethod() == "GET") {
+            response_body <<
+                "<script>\r\n"
+                "var xmlreq = new XMLHttpRequest();\r\n"
+                "xmlreq.open('POST', 'headerbugtest.php', true);\r\n"
+                "xmlreq.setRequestHeader('Content-Type', 'application/json');\r\n"
+                "xmlreq.onreadystatechange = function() {\r\n"
+                    "if (xmlreq.readyState == 4) {\r\n"
+                        "document.body.insertAdjacentHTML('beforeend', xmlreq.responseText);\r\n"
+                    "}\r\n"
+                "}\r\n"
+                "xmlreq.send('{}');\r\n"
+                "</script>\r\n";
+        }
 
-        std::string response = response_headers + response_body;
-        send(client_socket, response.c_str(), strlen(response.c_str()), 0);
+        response_body.seekg(0, std::ios::end);
+
+        std::stringstream response_headers;
+        response_headers <<
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/html; charset=UTF-8\r\n"
+            "Connection: keep-alive\r\n"
+            "Content-Length: " << response_body.tellg() << "\r\n\r\n";
+
+        std::string response = response_headers.str() + response_body.str();
+        send(client_socket, response.c_str(), static_cast<int>(response.length()), 0);
     }
 cleanup:
     closesocket(client_socket);
+    return 0;
 }
 
 ServerListener::~ServerListener() {
+    stop();
     WSACleanup();
 }

@@ -26,12 +26,13 @@
  * @todo Give the opportunity to handle client requests to the user (some kind of routing)
  */
 class ServerListener {
-    int port;
-    size_t buffer_size;
-    SOCKET listen_socket = INVALID_SOCKET;
+    char const *port;
+    static size_t const buffer_size = 255;
+    SOCKET listen_socket;
+    addrinfo *socket_props;
     bool server_running;
 
-    static void clientHandler(SOCKET client_socket, size_t buffer_size);
+    static DWORD CALLBACK clientHandler(SOCKET client_socket);
 
 public:
 
@@ -41,14 +42,14 @@ public:
      * @param port Port on which the server will be listening for connections
      * @param buffer_size Size of the buffer used to retrieve data from sockets
      */
-    ServerListener(int port=80, size_t buffer_size=255);
+    ServerListener(char const *port);
 
     /**
       * Start listening for connections.
       *
       * @param client_acceptation_error_callback The function receiving the ClientAcceptationException object when a problem with acceptation of new connection occurs
       */
-    void run(std::function<void(ClientAcceptationException)> client_acceptation_error_callback = [](ClientAcceptationException) {});
+    void run();
 
     /**
      * Stop listening for connections (close listening socket).

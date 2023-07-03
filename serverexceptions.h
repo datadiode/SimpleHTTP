@@ -1,4 +1,5 @@
 #include <string>
+#include <sstream>
 #include <stdexcept>
 
 #ifndef SERVEREXCEPTIONS_H
@@ -17,9 +18,11 @@ public:
     /**
      * @param info Information about the exception (possibly shown to the user)
      */
-    ServerException(std::string info) : std::runtime_error(info) {}
+    ServerException(char const *info) : std::runtime_error(info) {}
 
-    virtual ~ServerException() {}
+protected:
+    ServerException(std::ostream const &info): std::runtime_error(static_cast<std::stringstream const &>(info).str()) {}
+    static std::ostream &stream(std::stringstream const &s = std::stringstream()) { return const_cast<std::stringstream &>(s); }
 };
 
 /**
@@ -29,9 +32,7 @@ class ServerStartupException : public ServerException {
 public:
     ServerStartupException()
         : ServerException("Socket library initialization failed") {}
-    virtual ~ServerStartupException() {}
 };
-
 
 /**
  * @brief Exception being thrown in case of addrinfo() returning an error code
@@ -40,12 +41,9 @@ class AddrinfoException : public ServerException {
 public:
     AddrinfoException(int error_no)
         : ServerException(
-              std::string("addrinfo() failed with error: ") +
-              std::to_string(error_no)
+              stream() << "addrinfo() failed with error: " << error_no
         ) {}
-    virtual ~AddrinfoException() {}
 };
-
 
 /**
  * @brief Exception being thrown in case of socket() returning an error code
@@ -54,12 +52,9 @@ class SocketCreationException : public ServerException {
 public:
     SocketCreationException(int error_no)
         : ServerException(
-              std::string("socket() failed with error: ") +
-              std::to_string(error_no)
+              stream() << "socket() failed with error: " << error_no
         ) {}
-    virtual ~SocketCreationException() {}
 };
-
 
 /**
  * @brief Exception being thrown in case of bind() returning an error code
@@ -68,12 +63,9 @@ class SocketBindingException : public ServerException {
 public:
     SocketBindingException(int error_no)
         : ServerException(
-              std::string("bind() failed with error: ") +
-              std::to_string(error_no)
+              stream() << "bind() failed with error: " << error_no
         ) {}
-    virtual ~SocketBindingException() {}
 };
-
 
 /**
  * @brief Exception being thrown in case of listen() returning an error code
@@ -82,12 +74,9 @@ class ListenException : public ServerException {
 public:
     ListenException(int error_no)
         : ServerException(
-              std::string("listen() failed with error: ") +
-              std::to_string(error_no)
+              stream() << "listen() failed with error: " << error_no
         ) {}
-    virtual ~ListenException() {}
 };
-
 
 /**
  * @brief Exception being thrown in case of accept() returning an error code
@@ -96,11 +85,8 @@ class ClientAcceptationException : public ServerException {
 public:
     ClientAcceptationException(int error_no)
         : ServerException(
-              std::string("accept() failed with error: ") +
-              std::to_string(error_no)
+              stream() << "accept() failed with error: " << error_no
         ) {}
-    virtual ~ClientAcceptationException() {}
 };
 
 #endif // SERVEREXCEPTIONS_H
-

@@ -82,7 +82,7 @@ public:
      */
     void reset();
 
-    virtual ~RequestParser() = default;
+    virtual ~RequestParser() { }
 };
 
 #endif // REQUESTPARSER_H

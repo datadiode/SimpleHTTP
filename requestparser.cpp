@@ -77,7 +77,7 @@ void RequestParser::processChunk(const char *buf, size_t size) {
             switch(field) {
             case 0:
                 if(c == ' ' && previous_char == ':') {
-                    tmp_header_name.pop_back();
+                    tmp_header_name.resize(tmp_header_name.length() - 1);
                     field++;
                 } else {
                     tmp_header_name += c;
