@@ -164,15 +164,17 @@ DWORD ServerListener::clientHandler(SOCKET client_socket) {
         if (parser.getMethod() == "GET") {
             response_body <<
                 "<script>\r\n"
-                "var xmlreq = new XMLHttpRequest();\r\n"
-                "xmlreq.open('POST', 'headerbugtest.php', true);\r\n"
-                "xmlreq.setRequestHeader('Content-Type', 'application/json');\r\n"
-                "xmlreq.onreadystatechange = function() {\r\n"
-                    "if (xmlreq.readyState == 4) {\r\n"
-                        "document.body.insertAdjacentHTML('beforeend', xmlreq.responseText);\r\n"
+                "setTimeout(function() {\r\n"
+                    "var xmlreq = new XMLHttpRequest();\r\n"
+                    "xmlreq.open('POST', 'headerbugtest.php', true);\r\n"
+                    "xmlreq.setRequestHeader('Content-Type', 'application/json');\r\n"
+                    "xmlreq.onreadystatechange = function() {\r\n"
+                        "if (xmlreq.readyState == 4) {\r\n"
+                            "document.body.insertAdjacentHTML('beforeend', xmlreq.responseText);\r\n"
+                        "}\r\n"
                     "}\r\n"
-                "}\r\n"
-                "xmlreq.send('{}');\r\n"
+                    "xmlreq.send('{}');\r\n"
+                "}, 1000);\r\n"
                 "</script>\r\n";
         }
 
