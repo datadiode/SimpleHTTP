@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 10.00
+# Visual Studio 2008
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SimpleHTTP_vc9", "SimpleHTTP_vc9.vcproj", "{D33BD4BC-46AA-4379-8FA6-D7E8F8E742FF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D33BD4BC-46AA-4379-8FA6-D7E8F8E742FF}.Debug|Win32.ActiveCfg = Debug|Win32
+		{D33BD4BC-46AA-4379-8FA6-D7E8F8E742FF}.Debug|Win32.Build.0 = Debug|Win32
+		{D33BD4BC-46AA-4379-8FA6-D7E8F8E742FF}.Release|Win32.ActiveCfg = Release|Win32
+		{D33BD4BC-46AA-4379-8FA6-D7E8F8E742FF}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
